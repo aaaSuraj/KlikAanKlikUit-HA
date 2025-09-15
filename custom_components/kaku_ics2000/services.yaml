@@ -1,0 +1,52 @@
+identify:
+  name: Identify Device
+  description: Make a device identify itself by flashing
+  fields:
+    device_id:
+      name: Device ID
+      description: The ID of the device to identify (1-200)
+      required: true
+      example: 5
+      selector:
+        number:
+          min: 1
+          max: 200
+          mode: box
+
+refresh_devices:
+  name: Refresh Devices
+  description: Scan for new devices paired with ICS-2000
+
+reset_state:
+  name: Reset State
+  description: Reset saved state for devices
+  fields:
+    device_id:
+      name: Device ID
+      description: Device ID to reset (leave empty to reset all)
+      required: false
+      example: 3
+      selector:
+        number:
+          min: 1
+          max: 200
+          mode: box
+
+reload:
+  name: Reload Integration
+  description: Reload the integration (like Homebridge reload switch)
+
+run_scene:
+  name: Run Scene
+  description: Activate a scene
+  fields:
+    scene_id:
+      name: Scene ID
+      description: The ID of the scene to activate
+      required: true
+      example: 123
+      selector:
+        number:
+          min: 1
+          max: 999
+          mode: box

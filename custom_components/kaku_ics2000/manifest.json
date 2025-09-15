@@ -1,0 +1,13 @@
+{
+  "domain": "kaku_ics2000",
+  "name": "KlikAanKlikUit ICS-2000 (Homebridge Compatible)",
+  "version": "1.0.0",
+  "codeowners": ["@homebridge-compatible"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/kaku-ics2000-homebridge",
+  "issue_tracker": "https://github.com/kaku-ics2000-homebridge/issues",
+  "requirements": ["cryptography>=41.0.0"],
+  "iot_class": "local_polling",
+  "integration_type": "hub"
+}

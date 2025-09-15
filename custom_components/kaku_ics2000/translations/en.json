@@ -1,0 +1,157 @@
+{
+  "title": "KlikAanKlikUit ICS-2000 (Homebridge Compatible)",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to ICS-2000",
+        "description": "Set up your KlikAanKlikUit ICS-2000 gateway using Homebridge-compatible authentication.\n\nThe integration will automatically discover and track all your devices and scenes.",
+        "data": {
+          "mac": "MAC Address",
+          "email": "Email",
+          "password": "Password",
+          "ip_address": "IP Address (optional)",
+          "aes_key": "AES Key (optional)",
+          "name": "Custom Name (optional)"
+        },
+        "data_description": {
+          "mac": "MAC address of your ICS-2000 (format: AA:BB:CC:DD:EE:FF)",
+          "email": "Your KlikAanKlikUit account email",
+          "password": "Your KlikAanKlikUit account password",
+          "ip_address": "Static IP of ICS-2000 (leave empty for auto-discovery)",
+          "aes_key": "Custom AES encryption key (leave empty for automatic)",
+          "name": "Custom name for this hub"
+        }
+      },
+      "discovery_confirm": {
+        "title": "Discovered ICS-2000",
+        "description": "Found ICS-2000 gateway:\n- MAC: {mac}\n- IP: {ip}\n\nPlease enter your KlikAanKlikUit credentials to continue.",
+        "data": {
+          "email": "Email",
+          "password": "Password",
+          "name": "Custom Name (optional)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to ICS-2000. Check if it's on the same network.",
+      "invalid_auth": "Invalid email or password. Check your KlikAanKlikUit credentials.",
+      "invalid_mac": "Invalid MAC address format. Use format: AA:BB:CC:DD:EE:FF",
+      "unknown": "Unexpected error occurred"
+    },
+    "abort": {
+      "already_configured": "This ICS-2000 is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "ICS-2000 Options (Homebridge Compatible)",
+        "description": "Configure how your ICS-2000 integration works",
+        "data": {
+          "tries": "Command Retry Attempts",
+          "sleep": "Delay Between Retries",
+          "state_restore": "Restore States After Restart",
+          "device_discovery": "Auto-Discover New Devices",
+          "show_scenes": "Show Scenes",
+          "entity_blacklist": "Entity Blacklist",
+          "discover_message": "Custom Discovery Message",
+          "mqtt_enable": "Publish States to MQTT",
+          "mqtt_topic": "MQTT Topic Prefix",
+          "start_rest_server": "Start REST API Server",
+          "rest_server_port": "REST Server Port"
+        },
+        "data_description": {
+          "tries": "Number of times to retry failed commands (1-10)",
+          "sleep": "Seconds to wait between retry attempts",
+          "state_restore": "Remember device states after Home Assistant restart",
+          "device_discovery": "Automatically discover new devices paired with ICS-2000",
+          "show_scenes": "Show scenes from ICS-2000 (Homebridge feature)",
+          "entity_blacklist": "Entity IDs to exclude (comma-separated)",
+          "discover_message": "Custom UDP discovery packet (Homebridge feature)",
+          "mqtt_enable": "Publish device states to MQTT for external access",
+          "mqtt_topic": "Base MQTT topic for state publishing",
+          "start_rest_server": "Start REST API server (Homebridge feature)",
+          "rest_server_port": "Port for REST API server"
+        }
+      }
+    }
+  },
+  "services": {
+    "identify": {
+      "name": "Identify Device",
+      "description": "Make a device identify itself by flashing",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "The ID of the device to identify (1-200)"
+        }
+      }
+    },
+    "refresh_devices": {
+      "name": "Refresh Devices",
+      "description": "Scan for new devices paired with ICS-2000"
+    },
+    "reset_state": {
+      "name": "Reset State",
+      "description": "Reset saved state for devices",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "Device ID to reset (leave empty to reset all)"
+        }
+      }
+    },
+    "reload": {
+      "name": "Reload Integration",
+      "description": "Reload the integration (like Homebridge reload switch)"
+    },
+    "run_scene": {
+      "name": "Run Scene",
+      "description": "Activate a scene",
+      "fields": {
+        "scene_id": {
+          "name": "Scene ID",
+          "description": "The ID of the scene to activate"
+        }
+      }
+    }
+  },
+  "entity": {
+    "light": {
+      "kaku_light": {
+        "state_attributes": {
+          "device_id": {
+            "name": "Device ID"
+          },
+          "device_type": {
+            "name": "Device Type"
+          },
+          "device_model": {
+            "name": "Device Model"
+          },
+          "zigbee": {
+            "name": "Zigbee Device"
+          },
+          "dimmable": {
+            "name": "Dimmable"
+          },
+          "is_group": {
+            "name": "Group Device"
+          },
+          "color_temperature": {
+            "name": "Color Temperature"
+          },
+          "last_command": {
+            "name": "Last Command"
+          },
+          "last_update": {
+            "name": "Last Update"
+          },
+          "confidence": {
+            "name": "State Confidence"
+          }
+        }
+      }
+    }
+  }
+}

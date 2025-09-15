@@ -1,0 +1,20 @@
+{
+  "name": "KlikAanKlikUit ICS-2000",
+  "content_in_root": false,
+  "render_readme": true,
+  "domains": [
+    "light",
+    "switch",
+    "cover",
+    "binary_sensor",
+    "sensor"
+  ],
+  "homeassistant": "2024.1.0",
+  "iot_class": "Local Polling",
+  "country": [
+    "NL",
+    "BE"
+  ],
+  "zip_release": false,
+  "filename": "kaku_ics2000.zip"
+}
