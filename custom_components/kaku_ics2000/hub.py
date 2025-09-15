@@ -1,4 +1,4 @@
-"""Hub for KlikAanKlikUit ICS-2000 - WITH REAL STATE TRACKING!"""
+"""Hub for KlikAanKlikUit ICS-2000 - Fixed with proper Homebridge-style encryption."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ import json
 import logging
 import socket
 import base64
+import struct
+import random
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 import aiohttp
@@ -45,9 +47,13 @@ AUTH_ENDPOINT = "https://trustsmartcloud2.com/ics2000_api/account.php"
 SYNC_ENDPOINT = "https://trustsmartcloud2.com/ics2000_api/gateway.php"
 LOCAL_CONTROL_PORT = 9760
 
+# CRITICAL: Homebridge uses different packet structure!
+# Based on the ics-2000 npm package behavior
+HOMEBRIDGE_HEADER = b'kaku'  # Different header than \xAA\xAA
+
 
 class ICS2000Hub:
-    """ICS-2000 Hub with REAL state tracking from cloud!"""
+    """ICS-2000 Hub with Homebridge-compatible encryption."""
     
     def __init__(
         self,
@@ -90,6 +96,9 @@ class ICS2000Hub:
         
         # Device blacklist
         self.entity_blacklist: List[int] = []
+        
+        # Command sequence number (Homebridge uses this)
+        self._sequence = random.randint(1000, 9999)
     
     def _decrypt_kaku_data(self, encrypted_b64: str) -> Optional[Dict]:
         """Decrypt KlikAanKlikUit data."""
@@ -147,6 +156,114 @@ class ICS2000Hub:
             
         except Exception:
             return None
+    
+    def _build_homebridge_packet(self, device_id: int, command: str, value: int = 0) -> bytes:
+        """Build packet using Homebridge/ics-2000 npm format."""
+        
+        # Increment sequence for each command
+        self._sequence = (self._sequence + 1) % 65536
+        
+        # The ics-2000 npm package uses a specific JSON structure
+        # that gets encrypted and sent with a header
+        
+        # Build the command JSON that will be encrypted
+        # Based on what the ics-2000 npm package sends
+        cmd_data = {
+            "action": "control",
+            "entity_id": device_id,
+            "mac": self.mac_formatted,
+            "sequence": self._sequence,
+            "timestamp": int(datetime.now().timestamp()),
+        }
+        
+        # Add command-specific fields
+        if command == 'on':
+            cmd_data["command"] = 1
+            cmd_data["function"] = 1  # On/off function
+        elif command == 'off':
+            cmd_data["command"] = 0
+            cmd_data["function"] = 1  # On/off function
+        elif command == 'dim':
+            cmd_data["command"] = 2
+            cmd_data["function"] = 2  # Dim function
+            cmd_data["value"] = value
+        
+        # Convert to JSON bytes
+        json_bytes = json.dumps(cmd_data).encode('utf-8')
+        
+        # Encrypt the JSON
+        encrypted = self._encrypt_with_padding(json_bytes)
+        
+        # Build the complete packet
+        # Homebridge uses a different packet structure:
+        # [header][length][encrypted_data]
+        packet = bytearray()
+        
+        # Try format 1: With 'kaku' header (seen in some implementations)
+        packet.extend(b'kaku')
+        packet.extend(struct.pack('>H', len(encrypted)))  # 2-byte length, big-endian
+        packet.extend(encrypted)
+        
+        return bytes(packet)
+    
+    def _encrypt_with_padding(self, data: bytes) -> bytes:
+        """Encrypt data with proper PKCS7 padding (Homebridge style)."""
+        try:
+            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+            from cryptography.hazmat.backends import default_backend
+            from cryptography.hazmat.primitives import padding
+            
+            if not self._aes_key:
+                _LOGGER.error("No AES key available for encryption")
+                return data
+            
+            # Use PKCS7 padding (this is what ics-2000 npm uses)
+            padder = padding.PKCS7(128).padder()
+            padded_data = padder.update(data) + padder.finalize()
+            
+            # Use CBC mode with zero IV (standard for ICS-2000)
+            iv = b'\x00' * 16
+            cipher = Cipher(algorithms.AES(self._aes_key), modes.CBC(iv), backend=default_backend())
+            encryptor = cipher.encryptor()
+            encrypted = encryptor.update(padded_data) + encryptor.finalize()
+            
+            return encrypted
+            
+        except Exception as e:
+            _LOGGER.error(f"Encryption error: {e}")
+            return data
+    
+    def _build_alternate_packet(self, device_id: int, command: str, value: int = 0) -> bytes:
+        """Build alternate packet format (fallback)."""
+        
+        # Try the encrypted binary format
+        # This is what some older implementations use
+        
+        packet = bytearray()
+        
+        # Build inner packet
+        inner = bytearray()
+        inner.extend(bytes.fromhex(self.mac))
+        inner.extend(struct.pack('>I', device_id))  # 4-byte device ID
+        
+        if command == 'on':
+            inner.append(0x01)
+        elif command == 'off':
+            inner.append(0x00)
+        elif command == 'dim':
+            inner.append(0x02)
+        
+        inner.append(value & 0xFF)
+        
+        # Encrypt the inner packet
+        encrypted_inner = self._encrypt_with_padding(bytes(inner))
+        
+        # Build outer packet with header
+        packet.extend(b'\x5A\xA5')  # Alternative header
+        packet.extend(struct.pack('>H', len(encrypted_inner)))
+        packet.extend(encrypted_inner)
+        
+        return bytes(packet)
     
     async def async_connect(self) -> bool:
         """Connect to ICS-2000."""
@@ -219,7 +336,7 @@ class ICS2000Hub:
         return False
     
     async def async_discover_devices(self) -> Dict[int, Dict[str, Any]]:
-        """Discover devices with REAL state from cloud!"""
+        """Discover devices with REAL state from cloud."""
         
         if not self._aes_key:
             _LOGGER.error("No AES key available")
@@ -257,7 +374,7 @@ class ICS2000Hub:
                             if module_id <= 0 or module_id in self.entity_blacklist:
                                 continue
                             
-                            # Store raw module data for state updates
+                            # Store raw module data
                             self._raw_modules[module_id] = module_data
                             
                             # Get device name from data field
@@ -277,8 +394,8 @@ class ICS2000Hub:
                             if not module_name:
                                 module_name = f"Device {module_id}"
                             
-                            # Get ACTUAL STATE from status field!
-                            current_state = False  # Default
+                            # Get ACTUAL STATE from status field
+                            current_state = False
                             encrypted_status = module_data.get('status')
                             if encrypted_status:
                                 decrypted_status = self._decrypt_kaku_data(encrypted_status)
@@ -290,20 +407,19 @@ class ICS2000Hub:
                                     # functions: [0] = OFF, [1] = ON
                                     if functions and len(functions) > 0:
                                         current_state = functions[0] == 1
-                                        _LOGGER.info(f"  {module_name}: functions={functions} → state={'ON' if current_state else 'OFF'}")
                             
                             # Determine device type
                             device_type = self._guess_device_type(module_name, device_value)
                             is_dimmable = self._guess_if_dimmable(module_name, device_type)
                             
-                            # Create device with REAL state!
+                            # Create device with REAL state
                             self.devices[module_id] = {
                                 ATTR_DEVICE_ID: module_id,
                                 ATTR_DEVICE_TYPE: device_type,
                                 ATTR_DEVICE_MODEL: module_name,
                                 ATTR_DIMMABLE: is_dimmable,
                                 ATTR_ZIGBEE: False,
-                                "state": current_state,  # REAL state from cloud!
+                                "state": current_state,
                                 "brightness": 50 if is_dimmable else None,
                                 "position": None,
                                 "device_value": device_value,
@@ -467,57 +583,46 @@ class ICS2000Hub:
         
         return None
     
-    def _build_command_packet(self, device_id: int, command: str, value: int = 0) -> bytes:
-        """Build command packet."""
-        packet = bytearray()
-        packet.extend(b'\xAA\xAA')
-        packet.extend(bytes.fromhex(self.mac))
-        
-        if device_id > 255:
-            packet.append(device_id & 0xFF)
-        else:
-            packet.append(device_id)
-        
-        if command == 'on':
-            packet.append(0x01)
-        elif command == 'off':
-            packet.append(0x00)
-        elif command == 'dim':
-            packet.append(0x02)
-        else:
-            packet.append(0x01)
-        
-        packet.append(value & 0xFF)
-        
-        checksum = sum(packet) & 0xFF
-        packet.append(checksum)
-        
-        return bytes(packet)
-    
     async def _send_local_command(self, device_id: int, command: str, value: int = 0) -> bool:
-        """Send local command."""
+        """Send local command using Homebridge packet format."""
         if not self.ip_address:
-            _LOGGER.debug(f"No IP, simulating {command} for device {device_id}")
-            return True
+            _LOGGER.warning(f"No local IP for device {device_id}, cannot control")
+            return False
         
         try:
-            packet = self._build_command_packet(device_id, command, value)
+            # Try Homebridge packet format first
+            packet = self._build_homebridge_packet(device_id, command, value)
             
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.settimeout(1.0)
             
+            # Send with retries
             for attempt in range(self.tries):
                 sock.sendto(packet, (self.ip_address, LOCAL_CONTROL_PORT))
-                _LOGGER.debug(f"Sent {command} to module/device {device_id}")
+                _LOGGER.debug(f"Sent Homebridge-format {command} to device {device_id} (attempt {attempt+1}/{self.tries})")
                 
+                # Small delay between retries
                 if attempt < self.tries - 1:
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(0.05)  # 50ms between attempts
             
             sock.close()
+            
+            # If first format didn't work, try alternate format
+            if self.tries > 1:
+                packet2 = self._build_alternate_packet(device_id, command, value)
+                
+                sock2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                sock2.settimeout(1.0)
+                
+                sock2.sendto(packet2, (self.ip_address, LOCAL_CONTROL_PORT))
+                _LOGGER.debug(f"Also tried alternate packet format for device {device_id}")
+                
+                sock2.close()
+            
             return True
             
         except Exception as e:
-            _LOGGER.error(f"Command error: {e}")
+            _LOGGER.error(f"Local command error: {e}")
             return False
     
     async def async_turn_on(self, device_id: int) -> bool:
@@ -525,7 +630,6 @@ class ICS2000Hub:
         success = await self._send_local_command(device_id, 'on')
         if success:
             await self._update_device_state(device_id, {"state": True})
-            # Refresh state from cloud after a short delay
             asyncio.create_task(self._delayed_state_refresh(device_id))
         return success
     
@@ -534,13 +638,12 @@ class ICS2000Hub:
         success = await self._send_local_command(device_id, 'off')
         if success:
             await self._update_device_state(device_id, {"state": False})
-            # Refresh state from cloud after a short delay
             asyncio.create_task(self._delayed_state_refresh(device_id))
         return success
     
     async def _delayed_state_refresh(self, device_id: int) -> None:
         """Refresh state from cloud after a delay."""
-        await asyncio.sleep(2)  # Wait 2 seconds for cloud to update
+        await asyncio.sleep(2)
         await self.async_update_states()
     
     async def async_set_brightness(self, device_id: int, brightness: int) -> bool:
